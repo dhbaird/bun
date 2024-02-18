@@ -202,6 +202,7 @@ pub const Subprocess = struct {
     poll: Poll = Poll{ .poll_ref = null },
     stdio_pipes: std.ArrayListUnmanaged(Stdio.PipeExtra) = .{},
     stdio_inherits: std.ArrayListUnmanaged(i32) = .{},
+    stdio_close: std.ArrayListUnmanaged(i32) = .{},
 
     exit_promise: JSC.Strong = .{},
     on_exit_callback: JSC.Strong = .{},
@@ -1828,6 +1829,7 @@ pub const Subprocess = struct {
             this.on_exit_callback.deinit();
             this.stdio_pipes.deinit(bun.default_allocator);
             this.stdio_inherits.deinit(bun.default_allocator);
+            this.stdio_close.deinit(bun.default_allocator);
 
             if (this.deinit_onclose) {
                 log("destroy", .{});

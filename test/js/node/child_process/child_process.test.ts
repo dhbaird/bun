@@ -282,11 +282,11 @@ describe("spawnSync()", () => {
       expect(fds.has(`${fdB}`)).toBe(false);
     }
     {
-      // const stdio = [...nulls];
-      // stdio[fdB] = "inherit";
-      // const fds = new Set(spawnSync("ls", [`/dev/fd/`], { stdio, encoding: "utf8" }).stdout.split(/\s+/));
-      // expect(fds.has(`${fdA}`)).toBe(false);  // <---- TODO fix failure on this line
-      // expect(fds.has(`${fdB}`)).toBe(true);
+      const stdio = [...nulls];
+      stdio[fdB] = "inherit";
+      const fds = new Set(spawnSync("ls", [`/dev/fd/`], { stdio, encoding: "utf8" }).stdout.split(/\s+/));
+      expect(fds.has(`${fdA}`)).toBe(false);
+      expect(fds.has(`${fdB}`)).toBe(true);
     }
   });
 });
