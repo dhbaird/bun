@@ -3,7 +3,8 @@ import { describe, it, expect } from "bun:test";
 import { ChildProcess, spawn, execFile, exec, fork, spawnSync, execFileSync, execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
-import { bunExe, bunEnv } from "harness";
+import { openSync } from "node:fs";
+import { bunExe, bunEnv, isLinux } from "harness";
 import path from "path";
 
 const debug = process.env.DEBUG ? console.log : () => {};
@@ -259,6 +260,19 @@ describe("spawnSync()", () => {
   it("should spawn a process synchronously", () => {
     const { stdout } = spawnSync("echo", ["hello"], { encoding: "utf8" });
     expect(stdout.trim()).toBe("hello");
+  });
+
+  test.if(isLinux)("should inherit for fds >= 3", async () => {
+    const fdA = openSync("/dev/null", "r");
+    const fdB = openSync("/dev/null", "r");
+    const stdio = new Array(Math.max(fdA, fdB) + 1).fill(null);
+    stdio[0] = "ignore";
+    stdio[1] = "ignore";
+    stdio[2] = "ignore";
+    stdio[fdA] = "inherit";
+    stdio[fdB] = "inherit";
+    const proc = spawnSync("cat", [`/dev/fd/${fdA}`, `/dev/fd/${fdB}`], { stdio });
+    expect(proc.status).toStrictEqual(0);
   });
 });
 

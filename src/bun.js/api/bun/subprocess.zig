@@ -201,6 +201,7 @@ pub const Subprocess = struct {
     stderr: Readable,
     poll: Poll = Poll{ .poll_ref = null },
     stdio_pipes: std.ArrayListUnmanaged(Stdio.PipeExtra) = .{},
+    stdio_inherits: std.ArrayListUnmanaged(i32) = .{},
 
     exit_promise: JSC.Strong = .{},
     on_exit_callback: JSC.Strong = .{},
@@ -1826,6 +1827,7 @@ pub const Subprocess = struct {
             this.exit_promise.deinit();
             this.on_exit_callback.deinit();
             this.stdio_pipes.deinit(bun.default_allocator);
+            this.stdio_inherits.deinit(bun.default_allocator);
 
             if (this.deinit_onclose) {
                 log("destroy", .{});
@@ -1977,6 +1979,7 @@ pub const Subprocess = struct {
         var ipc_mode = IPCMode.none;
         var ipc_callback: JSValue = .zero;
         var stdio_pipes: std.ArrayListUnmanaged(Stdio.PipeExtra) = .{};
+        var stdio_inherits: std.ArrayListUnmanaged(i32) = .{};
         var pipes_to_close: std.ArrayListUnmanaged(bun.FileDescriptor) = .{};
         defer {
             for (pipes_to_close.items) |pipe_fd| {
@@ -2153,6 +2156,14 @@ pub const Subprocess = struct {
                                             .fd = 0,
                                             .fileno = @intCast(i),
                                         }) catch {
+                                            globalThis.throwOutOfMemory();
+                                            return .zero;
+                                        };
+                                    },
+                                    .inherit => {
+                                        stdio_inherits.append(bun.default_allocator,
+                                            @intCast(i)
+                                        ) catch {
                                             globalThis.throwOutOfMemory();
                                             return .zero;
                                         };
@@ -2483,6 +2494,17 @@ pub const Subprocess = struct {
             _ = maybe catch |err| return globalThis.handleError(err, "in configuring child stderr");
         }
 
+        for (stdio_inherits.items) |fileno| {
+            const maybe = blk: {
+                if (comptime Environment.isMac) {
+                    actions.inherit(bun.toFD(fileno)) catch |err| break :blk err;
+                } else {
+                    actions.dup2(bun.toFD(fileno), bun.toFD(fileno)) catch |err| break :blk err;
+                }
+            };
+            _ = maybe catch |err| return globalThis.handleError(err, "in configuring child stdio");
+        }
+
         actions.chdir(cwd) catch |err| return globalThis.handleError(err, "in chdir()");
 
         argv.append(allocator, null) catch {
@@ -2640,6 +2662,7 @@ pub const Subprocess = struct {
             .stdout = Readable.init(stdio[1], bun.toFD(stdout_pipe[0]), jsc_vm.allocator, default_max_buffer_size),
             .stderr = Readable.init(stdio[2], bun.toFD(stderr_pipe[0]), jsc_vm.allocator, default_max_buffer_size),
             .stdio_pipes = stdio_pipes,
+            .stdio_inherits = stdio_inherits,
             .on_exit_callback = if (on_exit_callback != .zero) JSC.Strong.create(on_exit_callback, globalThis) else .{},
             .ipc_mode = ipc_mode,
             // will be assigned in the block below
