@@ -2677,6 +2677,7 @@ pub const Subprocess = struct {
             .stderr = Readable.init(stdio[2], bun.toFD(stderr_pipe[0]), jsc_vm.allocator, default_max_buffer_size),
             .stdio_pipes = stdio_pipes,
             .stdio_inherits = stdio_inherits,
+            .stdio_close = stdio_close,
             .on_exit_callback = if (on_exit_callback != .zero) JSC.Strong.create(on_exit_callback, globalThis) else .{},
             .ipc_mode = ipc_mode,
             // will be assigned in the block below
