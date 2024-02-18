@@ -1980,6 +1980,7 @@ pub const Subprocess = struct {
         var ipc_callback: JSValue = .zero;
         var stdio_pipes: std.ArrayListUnmanaged(Stdio.PipeExtra) = .{};
         var stdio_inherits: std.ArrayListUnmanaged(i32) = .{};
+        var stdio_close: std.ArrayListUnmanaged(i32) = .{};
         var pipes_to_close: std.ArrayListUnmanaged(bun.FileDescriptor) = .{};
         defer {
             for (pipes_to_close.items) |pipe_fd| {
@@ -2147,7 +2148,7 @@ pub const Subprocess = struct {
                             i += 1;
 
                             while (stdio_iter.next()) |value| : (i += 1) {
-                                var new_item: Stdio = undefined;
+                                var new_item: Stdio = .{ .ignore = {} };
                                 if (!extractStdio(globalThis, i, value, &new_item))
                                     return JSC.JSValue.jsUndefined();
                                 switch (new_item) {
@@ -2168,7 +2169,14 @@ pub const Subprocess = struct {
                                             return .zero;
                                         };
                                     },
-                                    else => {},
+                                    else => {
+                                        stdio_close.append(bun.default_allocator,
+                                            @intCast(i)
+                                        ) catch {
+                                            globalThis.throwOutOfMemory();
+                                            return .zero;
+                                        };
+                                    },
                                 }
                             }
                         } else {
@@ -2503,6 +2511,10 @@ pub const Subprocess = struct {
                 }
             };
             _ = maybe catch |err| return globalThis.handleError(err, "in configuring child stdio");
+        }
+
+        for (stdio_close.items) |fileno| {
+            _ = actions.close(bun.toFD(fileno)) catch |err| return globalThis.handleError(err, "in configuring child stdio");
         }
 
         actions.chdir(cwd) catch |err| return globalThis.handleError(err, "in chdir()");
@@ -3289,6 +3301,7 @@ pub const Subprocess = struct {
         out_stdio: *Stdio,
     ) bool {
         if (value.isEmptyOrUndefinedOrNull()) {
+            out_stdio.* = Stdio{ .ignore = {} };
             return true;
         }
 
